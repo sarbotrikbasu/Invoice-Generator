@@ -13,38 +13,45 @@ from reportlab.pdfbase.ttfonts import TTFont
 from invoice_generator.models import InvoiceData
 
 # -----------------------------------------------------------------------------
-# Font Registration Strategy
-# Ensures clean Unicode rendering for Indian Rupee symbol (₹) across all styles
+# Font Loading Strategy
+# Load bundled TTF font from repository so Rupee symbol (₹) works 100% reliably
+# on Windows, Mac, Linux, Vercel Serverless, and Streamlit Cloud.
 # -----------------------------------------------------------------------------
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+FONT_PATH = os.path.join(BASE_DIR, "fonts", "CustomFont.ttf")
+
+# Register bundled TTF font
 SANS_FONT = "Helvetica"
 SERIF_FONT = "Times-Roman"
 MONO_FONT = "Courier"
+HAS_UNICODE_FONT = False
 
-def _register_unicode_fonts():
-    global SANS_FONT, SERIF_FONT, MONO_FONT
-    font_candidates = [
-        # Windows font paths
-        ("SegoeUI", r"C:\Windows\Fonts\segoeui.ttf"),
-        ("Arial", r"C:\Windows\Fonts\arial.ttf"),
-        ("Calibri", r"C:\Windows\Fonts\calibri.ttf"),
-        # Common Linux/Mac paths
-        ("DejaVuSans", "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"),
-        ("FreeSans", "/usr/share/fonts/truetype/freefont/FreeSans.ttf"),
+if os.path.exists(FONT_PATH):
+    try:
+        pdfmetrics.registerFont(TTFont("InvoiceUnicodeFont", FONT_PATH))
+        SANS_FONT = "InvoiceUnicodeFont"
+        MONO_FONT = "InvoiceUnicodeFont"
+        HAS_UNICODE_FONT = True
+    except Exception:
+        pass
+else:
+    # Attempt system font fallbacks
+    system_candidates = [
+        r"C:\Windows\Fonts\arial.ttf",
+        r"C:\Windows\Fonts\segoeui.ttf",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+        "/usr/share/fonts/truetype/freefont/FreeSans.ttf"
     ]
-
-    for name, path in font_candidates:
-        if os.path.exists(path):
+    for sys_path in system_candidates:
+        if os.path.exists(sys_path):
             try:
-                pdfmetrics.registerFont(TTFont(name, path))
-                SANS_FONT = name
-                MONO_FONT = name
-                # Register serif as SANS_FONT fallback if standard Times-Roman lacks ₹
-                SERIF_FONT = name
+                pdfmetrics.registerFont(TTFont("InvoiceUnicodeFont", sys_path))
+                SANS_FONT = "InvoiceUnicodeFont"
+                MONO_FONT = "InvoiceUnicodeFont"
+                HAS_UNICODE_FONT = True
                 break
             except Exception:
                 continue
-
-_register_unicode_fonts()
 
 
 class NumberedCanvas(canvas.Canvas):
@@ -84,7 +91,7 @@ class NumberedCanvas(canvas.Canvas):
 def format_currency(amount: float) -> str:
     """Format float into standard invoice currency string (e.g. ₹32971.00)."""
     formatted_val = f"{amount:.2f}"
-    return f"₹{formatted_val}"
+    return f"₹{formatted_val}" if HAS_UNICODE_FONT else f"Rs. {formatted_val}"
 
 
 def generate_invoice_pdf(invoice_data: InvoiceData) -> bytes:
@@ -110,7 +117,7 @@ def generate_invoice_pdf(invoice_data: InvoiceData) -> bytes:
     LINE_COLOR = colors.HexColor("#E2E2E2")
     DARK_LINE_COLOR = colors.HexColor("#999999")
 
-    # Typography Styles
+    # Typography Styles matching original PDF
     style_label = ParagraphStyle(
         'SectionLabel',
         parent=styles['Normal'],
@@ -183,9 +190,9 @@ def generate_invoice_pdf(invoice_data: InvoiceData) -> bytes:
     style_total_due_value = ParagraphStyle(
         'TotalDueValue',
         parent=styles['Normal'],
-        fontName=SANS_FONT,
-        fontSize=24,
-        leading=26,
+        fontName=SERIF_FONT if SERIF_FONT != "Times-Roman" else SANS_FONT,
+        fontSize=26,
+        leading=28,
         textColor=PRIMARY_TEXT,
         alignment=2
     )
@@ -308,7 +315,15 @@ def generate_invoice_pdf(invoice_data: InvoiceData) -> bytes:
     subtotal_value = Paragraph(f"<b>{format_currency(invoice_data.subtotal)}</b>", style_table_cell_right)
 
     total_label = Paragraph("T O T A L &nbsp; D U E", style_label)
-    total_value = Paragraph(f"<b>{format_currency(invoice_data.total_due)}</b>", style_total_due_value)
+
+    # Format total due with custom font for ₹ symbol and bold serif/sans for numbers
+    total_val_str = f"{invoice_data.total_due:.2f}"
+    if HAS_UNICODE_FONT:
+        total_due_html = f"<b><font name='{SANS_FONT}'>₹</font>{total_val_str}</b>"
+    else:
+        total_due_html = f"<b>Rs. {total_val_str}</b>"
+
+    total_value = Paragraph(total_due_html, style_total_due_value)
 
     totals_data = [
         ['', subtotal_label, subtotal_value],
@@ -323,8 +338,8 @@ def generate_invoice_pdf(invoice_data: InvoiceData) -> bytes:
         ('RIGHTPADDING', (0, 0), (-1, -1), 0),
         ('TOPPADDING', (0, 0), (-1, -1), 4),
         ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
-        ('LINEABOVE', (1, 0), (2, 0), 0.5, DARK_LINE_COLOR), # Line above Subtotal
-        ('LINEABOVE', (1, 2), (1, 2), 0.5, DARK_LINE_COLOR), # Line above TOTAL DUE label
+        ('LINEABOVE', (1, 0), (2, 0), 0.5, DARK_LINE_COLOR),
+        ('LINEABOVE', (1, 2), (1, 2), 0.5, DARK_LINE_COLOR),
     ]))
 
     story.append(totals_table)

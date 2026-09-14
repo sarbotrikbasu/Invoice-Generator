@@ -76,13 +76,21 @@ with st.sidebar:
         st.session_state.reset_trigger = True
         st.rerun()
 
-# Pre-populate default sample state matching AWS June invoice
-if "items" not in st.session_state or getattr(st.session_state, "reset_trigger", False):
+# Pre-populate default sample state matching AWS June invoice safely
+DEFAULT_ITEMS = [
+    {"item_no": "01", "description": "AWS Charges on Actuals for June", "qty": 1.0, "rate": 32971.00},
+    {"item_no": "02", "description": "Additional management charges for AWS (7%)", "qty": 1.0, "rate": 2300.00}
+]
+
+if "invoice_items_data" not in st.session_state or st.session_state.get("reset_trigger", False):
     st.session_state.reset_trigger = False
-    st.session_state.items = [
-        {"item_no": "01", "description": "AWS Charges on Actuals for June", "qty": 1.0, "rate": 32971.00},
-        {"item_no": "02", "description": "Additional management charges for AWS (7%)", "qty": 1.0, "rate": 2300.00}
-    ]
+    st.session_state.invoice_items_data = [item.copy() for item in DEFAULT_ITEMS]
+
+# Ensure invoice_items_data is guaranteed to be a valid list of dicts for pandas DataFrame
+raw_items = st.session_state.get("invoice_items_data", DEFAULT_ITEMS)
+if not isinstance(raw_items, list) or len(raw_items) == 0 or not isinstance(raw_items[0], dict):
+    raw_items = [item.copy() for item in DEFAULT_ITEMS]
+    st.session_state.invoice_items_data = raw_items
 
 # Layout Columns
 col_left, col_right = st.columns([1.1, 0.9])
@@ -135,8 +143,8 @@ with col_left:
 
     st.markdown("### 6. Line Items & Amounts")
     
-    # Data editor for line items
-    df_items = pd.DataFrame(st.session_state.items)
+    # Data editor for line items using safely constructed DataFrame
+    df_items = pd.DataFrame(raw_items)
     edited_df = st.data_editor(
         df_items,
         num_rows="dynamic",
@@ -147,7 +155,7 @@ with col_left:
             "rate": st.column_config.NumberColumn("Rate (₹)", min_value=0.0, format="₹%.2f", required=True)
         },
         use_container_width=True,
-        key="items_editor"
+        key="items_data_editor"
     )
 
     # Calculate subtotal
@@ -155,9 +163,9 @@ with col_left:
     parsed_items = []
     if not edited_df.empty:
         for _, row in edited_df.iterrows():
-            if pd.notna(row["item_no"]) and pd.notna(row["description"]):
-                qty = float(row.get("qty", 1.0))
-                rate = float(row.get("rate", 0.0))
+            if pd.notna(row.get("item_no")) and pd.notna(row.get("description")):
+                qty = float(row.get("qty", 1.0)) if pd.notna(row.get("qty")) else 1.0
+                rate = float(row.get("rate", 0.0)) if pd.notna(row.get("rate")) else 0.0
                 amt = qty * rate
                 subtotal += amt
                 parsed_items.append(InvoiceItem(

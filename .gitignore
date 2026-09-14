@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.env
+.venv/
+venv/
+.streamlit/config.toml
+.DS_Store
+*.log
+test_invoice.pdf

@@ -1,0 +1,19 @@
+# ============================================================
+# Invoice Generator – Combined Backend + Frontend Requirements
+# ============================================================
+
+# FastAPI backend & Serverless
+fastapi>=0.115.6
+uvicorn[standard]>=0.34.0
+pydantic>=2.0.0
+
+# PDF Generation Engine
+reportlab>=4.0.0
+
+# Streamlit frontend
+streamlit>=1.41.1
+requests>=2.32.3
+pandas>=2.2.0
+
+# Utilities
+python-dotenv>=1.0.0

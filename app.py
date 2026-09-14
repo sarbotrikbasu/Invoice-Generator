@@ -215,10 +215,15 @@ if generate_btn:
     )
 
     if use_api:
+        # Smart URL path resolution
+        target_url = api_url.strip()
+        if not target_url.endswith("/generate-invoice") and not target_url.endswith("/api/generate-invoice"):
+            target_url = target_url.rstrip("/") + "/api/generate-invoice"
+
         try:
             with st.spinner("Connecting to FastAPI backend..."):
                 resp = requests.post(
-                    api_url,
+                    target_url,
                     json=invoice_payload.model_dump(),
                     headers={"Content-Type": "application/json"},
                     timeout=10
@@ -230,7 +235,7 @@ if generate_btn:
                     st.warning(f"Backend returned status {resp.status_code}. Using local fallback engine...")
                     pdf_bytes = generate_invoice_pdf(invoice_payload)
         except Exception as e:
-            st.info(f"Could not reach FastAPI backend at `{api_url}` ({e}). Using local engine fallback.")
+            st.info(f"Could not reach FastAPI backend at `{target_url}` ({e}). Using local engine fallback.")
             pdf_bytes = generate_invoice_pdf(invoice_payload)
     else:
         with st.spinner("Generating PDF locally..."):

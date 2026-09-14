@@ -24,6 +24,8 @@ app.add_middleware(
 def health_check():
     return {"status": "ok", "message": "Invoice PDF Generator API is operational"}
 
+@app.post("/")
+@app.post("/generate-invoice")
 @app.post("/api/generate-invoice")
 def generate_invoice(invoice: InvoiceData):
     try:
